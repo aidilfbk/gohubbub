@@ -19,13 +19,15 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Struct for storing information about a subscription.
 type subscription struct {
 	hub        string
 	topic      string
-	id         int
+	id         uuid.UUID
 	handler    func(string, []byte) // Content-Type, ResponseBody
 	lease      time.Duration
 	verifiedAt time.Time
@@ -36,9 +38,6 @@ func (s subscription) String() string {
 }
 
 var nilSubscription = &subscription{}
-
-// Used to create callback URLs.
-var subscriptionIdCounter = 0
 
 // A HttpRequester is used to make HTTP requests.  http.Client{} satisfies this
 // interface.
@@ -126,11 +125,10 @@ func (client *Client) Subscribe(hub, topic string, handler func(string, []byte))
 	s := &subscription{
 		hub:     hub,
 		topic:   topic,
-		id:      subscriptionIdCounter,
+		id:      uuid.New(),
 		handler: handler,
 	}
 	client.subscriptions[topic] = s
-	subscriptionIdCounter = subscriptionIdCounter + 1
 	if client.running {
 		client.makeSubscriptionRequest(s)
 	}
@@ -250,8 +248,8 @@ func (client *Client) makeUnsubscribeRequeast(s *subscription) {
 	}
 }
 
-func (client *Client) formatCallbackURL(callback int) string {
-	return fmt.Sprintf("http://%s/push-callback/%d", client.self, callback)
+func (client *Client) formatCallbackURL(callback uuid.UUID) string {
+	return fmt.Sprintf("http://%s/push-callback/%s", client.self, callback.String())
 }
 
 func (client *Client) handleDefaultRequest(resp http.ResponseWriter, req *http.Request) {
@@ -328,7 +326,7 @@ func (client *Client) subscriptionForPath(path string) (*subscription, bool) {
 	if len(parts) != 3 {
 		return nilSubscription, false
 	}
-	id, err := strconv.Atoi(parts[2])
+	id, err := uuid.Parse(parts[2])
 	if err != nil {
 		return nilSubscription, false
 	}

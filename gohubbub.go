@@ -9,16 +9,13 @@ package gohubbub
 import (
 	"bytes"
 	"container/ring"
+	"crypto"
 	"crypto/hmac"
 	"crypto/md5"
-	"crypto/sha1"
-	"crypto/sha256"
-	"crypto/sha512"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/xml"
 	"fmt"
-	"hash"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -383,11 +380,11 @@ func (client *Client) handleCallback(resp http.ResponseWriter, req *http.Request
 
 }
 
-var supportedHMACAlgorithms map[string]func() hash.Hash = map[string]func() hash.Hash{
-	"sha1":   sha1.New,
-	"sha256": sha256.New,
-	"sha384": sha512.New384,
-	"sha512": sha512.New,
+var supportedHMACAlgorithms map[string]crypto.Hash = map[string]crypto.Hash{
+	"sha1":   crypto.SHA1,
+	"sha256": crypto.SHA256,
+	"sha384": crypto.SHA384,
+	"sha512": crypto.SHA512,
 }
 
 func (client *Client) validateHubSignature(header string, body []byte) bool {
@@ -406,10 +403,9 @@ func (client *Client) validateHubSignature(header string, body []byte) bool {
 		log.Printf("Invalid X-Hub-Signature algorithm: %s", header)
 		return false
 	}
-	mac := hmac.New(hashAlgorithm, *client.hubSecretKey)
 
 	hexReceviedMAC := headerData[1]
-	if !(hex.DecodedLen(len(hexReceviedMAC)) == mac.Size()) {
+	if !(hex.DecodedLen(len(hexReceviedMAC)) == hashAlgorithm.Size()) {
 		log.Printf("Invalid X-Hub-Signature digest length: %s", header)
 		return false
 	}
@@ -420,6 +416,7 @@ func (client *Client) validateHubSignature(header string, body []byte) bool {
 		return false
 	}
 
+	mac := hmac.New(hashAlgorithm.New, *client.hubSecretKey)
 	mac.Write(body)
 	expectedMac := mac.Sum(nil)
 

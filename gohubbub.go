@@ -146,12 +146,15 @@ func (client *Client) DiscoverAndSubscribe(topic string, handler func(string, []
 // Subscribe adds a handler will be called when an update notification is
 // received.  If a handler already exists for the given topic it will be
 // overridden.
-func (client *Client) Subscribe(hub, topic string, handler func(string, []byte)) {
+func (client *Client) Subscribe(hub, topic string, handler func(string, []byte), leaseSeconds ...uint32) {
 	s := &subscription{
 		hub:     hub,
 		topic:   topic,
 		id:      uuid.New(),
 		handler: handler,
+	}
+	if len(leaseSeconds) == 1 {
+		s.lease = time.Second * time.Duration(leaseSeconds[0])
 	}
 	client.subscriptions[topic] = s
 	if client.running {
@@ -249,7 +252,9 @@ func (client *Client) makeSubscriptionRequest(s *subscription) {
 	body.Set("hub.callback", callbackUrl)
 	body.Add("hub.topic", s.topic)
 	body.Add("hub.mode", "subscribe")
-	// body.Add("hub.lease_seconds", "60")
+	if s.lease != 0 {
+		body.Set("hub.lease_seconds", fmt.Sprintf("%d", uint32(s.lease.Seconds())))
+	}
 	if client.hubSecretKey != nil {
 		body.Set("hub.secret", string(*client.hubSecretKey))
 	}

@@ -9,9 +9,16 @@ package gohubbub
 import (
 	"bytes"
 	"container/ring"
+	"crypto/hmac"
 	"crypto/md5"
+	"crypto/sha1"
+	"crypto/sha256"
+	"crypto/sha512"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/xml"
 	"fmt"
+	"hash"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -58,6 +65,7 @@ type Client struct {
 	httpRequester HttpRequester            // e.g. http.Client{}.
 	history       *ring.Ring               // Stores past messages, for deduplication.
 	https         bool                     // Whether the callback url supports HTTPS
+	hubSecretKey  *[]byte
 }
 
 func NewClient(self string, from string) *Client {
@@ -69,7 +77,25 @@ func NewClient(self string, from string) *Client {
 		&http.Client{}, // TODO: Use client with Timeout transport.
 		ring.New(50),
 		false,
+		nil,
 	}
+}
+
+// SetHubSecretKey sets the hub.secret used in subscriptions
+func (client *Client) SetHubSecretKey(key []byte) error {
+	enc := base64.RawURLEncoding
+	keyLen := enc.EncodedLen(len(key))
+	if keyLen > 200 {
+		/*
+			https://www.w3.org/TR/websub/#subscriber-sends-subscription-request
+			This parameter MUST be less than 200 bytes in length.
+		*/
+		return fmt.Errorf("Secret key too long, %x", key)
+	}
+	urlSafeKey := make([]byte, keyLen)
+	enc.Encode(urlSafeKey, key)
+	client.hubSecretKey = &urlSafeKey
+	return nil
 }
 
 // HasSubscription returns true if a subscription exists for the topic.
@@ -227,6 +253,9 @@ func (client *Client) makeSubscriptionRequest(s *subscription) {
 	body.Add("hub.topic", s.topic)
 	body.Add("hub.mode", "subscribe")
 	// body.Add("hub.lease_seconds", "60")
+	if client.hubSecretKey != nil {
+		body.Set("hub.secret", string(*client.hubSecretKey))
+	}
 
 	req, _ := http.NewRequest("POST", s.hub, bytes.NewBufferString(body.Encode()))
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
@@ -334,11 +363,70 @@ func (client *Client) handleCallback(resp http.ResponseWriter, req *http.Request
 			log.Printf("Update for %s", s)
 			resp.Write([]byte{})
 
+			if client.hubSecretKey != nil {
+				hubSignatureHeader := req.Header.Get("X-Hub-Signature")
+				if hubSignatureHeader == "" {
+					log.Printf("Expected X-Hub-Signature header from Hub")
+					return
+				}
+				if !client.validateHubSignature(hubSignatureHeader, requestBody) {
+					return
+				}
+			}
+
 			// Asynchronously notify the subscription handler, shouldn't affect response.
 			go client.broadcast(s, req.Header.Get("Content-Type"), requestBody)
 		}
 	}
 
+}
+
+var supportedHMACAlgorithms map[string]func() hash.Hash = map[string]func() hash.Hash{
+	"sha1":   sha1.New,
+	"sha256": sha256.New,
+	"sha384": sha512.New384,
+	"sha512": sha512.New,
+}
+
+func (client *Client) validateHubSignature(header string, body []byte) bool {
+	/*
+		https://www.w3.org/TR/websub/#signature-validation
+		If the signature does not match, subscribers MUST locally ignore the message as invalid. Subscribers MAY still acknowledge this request with a 2xx response code in order to be able to process the message asynchronously and/or prevent brute-force attempts of the signature.
+	*/
+	headerData := strings.Split(header, "=")
+	if len(headerData) != 2 {
+		log.Printf("Invalid X-Hub-Signature format: %s", header)
+		return false
+	}
+	algorithmName := headerData[0]
+	hashAlgorithm, algorithmSupported := supportedHMACAlgorithms[algorithmName]
+	if !algorithmSupported {
+		log.Printf("Invalid X-Hub-Signature algorithm: %s", header)
+		return false
+	}
+	mac := hmac.New(hashAlgorithm, *client.hubSecretKey)
+
+	hexReceviedMAC := headerData[1]
+	if !(hex.DecodedLen(len(hexReceviedMAC)) == mac.Size()) {
+		log.Printf("Invalid X-Hub-Signature digest length: %s", header)
+		return false
+	}
+
+	receivedMac, err := hex.DecodeString(hexReceviedMAC)
+	if err != nil {
+		log.Printf("Failed decoding hex string: '%s', %v", hexReceviedMAC, err)
+		return false
+	}
+
+	mac.Write(body)
+	expectedMac := mac.Sum(nil)
+
+	if !hmac.Equal(expectedMac, receivedMac) {
+		log.Printf("Incorrect X-Hub-Signature provided. Expected %x, got %x", expectedMac, receivedMac)
+		return false
+	}
+
+	return true
 }
 
 func (client *Client) subscriptionForPath(path string) (*subscription, bool) {

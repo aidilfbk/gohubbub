@@ -57,6 +57,7 @@ type Client struct {
 	subscriptions map[string]*subscription // Map of subscriptions.
 	httpRequester HttpRequester            // e.g. http.Client{}.
 	history       *ring.Ring               // Stores past messages, for deduplication.
+	https         bool                     // Whether the callback url supports HTTPS
 }
 
 func NewClient(self string, from string) *Client {
@@ -67,6 +68,7 @@ func NewClient(self string, from string) *Client {
 		make(map[string]*subscription),
 		&http.Client{}, // TODO: Use client with Timeout transport.
 		ring.New(50),
+		false,
 	}
 }
 
@@ -161,6 +163,20 @@ func (client *Client) StartAndServe(addr string, port int) {
 	log.Fatal(http.ListenAndServe(fmt.Sprintf("%s:%d", addr, port), nil))
 }
 
+func (client *Client) StartAndServeTLS(addr string, port int, certFile, keyFile string) {
+	client.https = true
+	client.RegisterHandler(http.DefaultServeMux)
+
+	// For default server give other paths a noop endpoint.
+	http.HandleFunc("/", client.handleDefaultRequest)
+
+	// Trigger subscription requests async.
+	go client.Start()
+
+	log.Printf("Starting HTTPS server on %s:%d", addr, port)
+	log.Fatal(http.ListenAndServeTLS(fmt.Sprintf("%s:%d", addr, port), certFile, keyFile, nil))
+}
+
 // RegisterHandler binds the client's HandlerFunc to the provided MUX on the
 // path /push-callback/
 func (client *Client) RegisterHandler(mux *http.ServeMux) {
@@ -249,7 +265,11 @@ func (client *Client) makeUnsubscribeRequeast(s *subscription) {
 }
 
 func (client *Client) formatCallbackURL(callback uuid.UUID) string {
-	return fmt.Sprintf("http://%s/push-callback/%s", client.self, callback.String())
+	var secureProtocolSuffix string
+	if client.https {
+		secureProtocolSuffix = "s"
+	}
+	return fmt.Sprintf("http%s://%s/push-callback/%s", secureProtocolSuffix, client.self, callback.String())
 }
 
 func (client *Client) handleDefaultRequest(resp http.ResponseWriter, req *http.Request) {

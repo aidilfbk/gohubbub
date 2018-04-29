@@ -185,7 +185,7 @@ func (client *Client) defaultHTTPHandler(httpMuxArg ...*http.ServeMux) http.Hand
 	client.RegisterHandler(httpMux)
 
 	// For default server give other paths a noop endpoint.
-	httpMux.HandleFunc("/", client.handleDefaultRequest)
+	httpMux.HandleFunc("/", handleDefaultRequest)
 
 	return httpMux
 }
@@ -311,7 +311,7 @@ func (client *Client) formatCallbackURL(callback uuid.UUID) string {
 	return fmt.Sprintf("http%s://%s/push-callback/%s", secureProtocolSuffix, client.self, callback.String())
 }
 
-func (client *Client) handleDefaultRequest(resp http.ResponseWriter, req *http.Request) {
+func handleDefaultRequest(resp http.ResponseWriter, req *http.Request) {
 	resp.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	resp.Write([]byte("gohubbub ok"))
 	log.Println("Request on", req.URL.Path)

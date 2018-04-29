@@ -68,7 +68,7 @@ type Client struct {
 func NewClient(self string, from string) *Client {
 	return &Client{
 		self,
-		fmt.Sprintf("%s (gohubbub)", from),
+		fmt.Sprintf("%s / %s (gohubbub)", from, self),
 		false,
 		make(map[string]*subscription),
 		&http.Client{}, // TODO: Use client with Timeout transport.

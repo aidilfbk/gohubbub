@@ -360,7 +360,6 @@ func (client *Client) handleCallback(resp http.ResponseWriter, req *http.Request
 
 	case "denied":
 		log.Printf("Subscription denied for %s, reason was %s", topic, params.Get("hub.reason"))
-		resp.Write([]byte{})
 		// TODO: Don't do anything for now, should probably mark the subscription.
 
 	default:
@@ -371,7 +370,6 @@ func (client *Client) handleCallback(resp http.ResponseWriter, req *http.Request
 
 		} else {
 			log.Printf("Update for %s", s)
-			resp.Write([]byte{})
 
 			// Asynchronously validate X-Hub-Signature then notify the subscription handler, shouldn't affect response.
 			go func() {

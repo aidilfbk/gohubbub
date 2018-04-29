@@ -399,25 +399,25 @@ func (client *Client) validateHubSignature(header string, body []byte) bool {
 	*/
 	headerData := strings.Split(header, "=")
 	if len(headerData) != 2 {
-		log.Printf("Invalid X-Hub-Signature format: %s", header)
+		log.Printf("Invalid X-Hub-Signature format: %q", header)
 		return false
 	}
 	algorithmName := headerData[0]
 	hashAlgorithm, algorithmSupported := supportedHMACAlgorithms[algorithmName]
 	if !algorithmSupported {
-		log.Printf("Invalid X-Hub-Signature algorithm: %s", header)
+		log.Printf("Unsupported X-Hub-Signature algorithm: %q", header)
 		return false
 	}
 
 	hexReceviedMAC := headerData[1]
 	if !(hex.DecodedLen(len(hexReceviedMAC)) == hashAlgorithm.Size()) {
-		log.Printf("Invalid X-Hub-Signature digest length: %s", header)
+		log.Printf("Invalid X-Hub-Signature digest length: %q", header)
 		return false
 	}
 
 	receivedMac, err := hex.DecodeString(hexReceviedMAC)
 	if err != nil {
-		log.Printf("Failed decoding hex string: '%s', %v", hexReceviedMAC, err)
+		log.Printf("Failed decoding hex string: %q, %v", hexReceviedMAC, err)
 		return false
 	}
 
@@ -426,7 +426,7 @@ func (client *Client) validateHubSignature(header string, body []byte) bool {
 	expectedMac := mac.Sum(nil)
 
 	if !hmac.Equal(expectedMac, receivedMac) {
-		log.Printf("Incorrect X-Hub-Signature provided. Expected %x, got %x", expectedMac, receivedMac)
+		log.Printf("Incorrect X-Hub-Signature provided: expected %x, got %x", expectedMac, receivedMac)
 		return false
 	}
 

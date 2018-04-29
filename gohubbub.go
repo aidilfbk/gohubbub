@@ -410,7 +410,7 @@ func (client *Client) validateHubSignature(header string, body []byte) bool {
 	}
 
 	hexReceviedMAC := headerData[1]
-	if !(hex.DecodedLen(len(hexReceviedMAC)) == hashAlgorithm.Size()) {
+	if hex.DecodedLen(len(hexReceviedMAC)) != hashAlgorithm.Size() {
 		log.Printf("Invalid X-Hub-Signature digest length: %q", header)
 		return false
 	}

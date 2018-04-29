@@ -343,7 +343,12 @@ func (client *Client) handleCallback(resp http.ResponseWriter, req *http.Request
 
 		} else {
 			log.Printf("Unexpected subscription for %s", topic)
-			http.Error(resp, "Unexpected subscription", http.StatusBadRequest)
+
+			/*
+				https://www.w3.org/TR/websub/#verification-details
+				The subscriber MUST confirm that the hub.topic corresponds to a pending subscription or unsubscription that it wishes to carry out. [...] If the subscriber does not agree with the action, the subscriber MUST respond with a 404 "Not Found" response.
+			*/
+			resp.WriteHeader(http.StatusNotFound)
 		}
 
 	case "unsubscribe":
@@ -355,7 +360,12 @@ func (client *Client) handleCallback(resp http.ResponseWriter, req *http.Request
 
 		} else {
 			log.Printf("Unexpected unsubscribe for %s", topic)
-			http.Error(resp, "Unexpected unsubscribe", http.StatusBadRequest)
+
+			/*
+				https://www.w3.org/TR/websub/#verification-details
+				The subscriber MUST confirm that the hub.topic corresponds to a pending subscription or unsubscription that it wishes to carry out. [...] If the subscriber does not agree with the action, the subscriber MUST respond with a 404 "Not Found" response.
+			*/
+			resp.WriteHeader(http.StatusNotFound)
 		}
 
 	case "denied":
@@ -366,7 +376,12 @@ func (client *Client) handleCallback(resp http.ResponseWriter, req *http.Request
 		s, exists := client.subscriptionForPath(req.URL.Path)
 		if !exists {
 			log.Printf("Callback for unknown subscription: %s %v", req.URL.String(), req.Header.Get("Link"))
-			http.Error(resp, "Unknown subscription", http.StatusBadRequest)
+
+			/*
+				https://www.w3.org/TR/websub/#content-distribution
+				The subscriber's callback URL MAY return an HTTP 410 code to indicate that the subscription has been deleted, and the hub MAY terminate the subscription if it receives that code as a response.
+			*/
+			resp.WriteHeader(http.StatusGone)
 
 		} else {
 			log.Printf("Update for %s", s)

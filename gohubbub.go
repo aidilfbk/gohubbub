@@ -174,33 +174,41 @@ func (client *Client) Unsubscribe(topic string) {
 	}
 }
 
+func (client *Client) defaultHTTPHandler(httpMuxArg ...*http.ServeMux) http.Handler {
+	var httpMux *http.ServeMux
+	if len(httpMuxArg) == 1 {
+		httpMux = httpMuxArg[0]
+	} else {
+		httpMux = http.NewServeMux()
+	}
+
+	client.RegisterHandler(httpMux)
+
+	// For default server give other paths a noop endpoint.
+	httpMux.HandleFunc("/", client.handleDefaultRequest)
+
+	return httpMux
+}
+
 // StartAndServe starts a server using DefaultServeMux, and makes initial
 // subscription requests.
 func (client *Client) StartAndServe(addr string, port int) {
-	client.RegisterHandler(http.DefaultServeMux)
-
-	// For default server give other paths a noop endpoint.
-	http.HandleFunc("/", client.handleDefaultRequest)
 
 	// Trigger subscription requests async.
 	go client.Start()
 
 	log.Printf("Starting HTTP server on %s:%d", addr, port)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf("%s:%d", addr, port), nil))
+	log.Fatal(http.ListenAndServe(fmt.Sprintf("%s:%d", addr, port), client.defaultHTTPHandler()))
 }
 
 func (client *Client) StartAndServeTLS(addr string, port int, certFile, keyFile string) {
 	client.https = true
-	client.RegisterHandler(http.DefaultServeMux)
-
-	// For default server give other paths a noop endpoint.
-	http.HandleFunc("/", client.handleDefaultRequest)
 
 	// Trigger subscription requests async.
 	go client.Start()
 
 	log.Printf("Starting HTTPS server on %s:%d", addr, port)
-	log.Fatal(http.ListenAndServeTLS(fmt.Sprintf("%s:%d", addr, port), certFile, keyFile, nil))
+	log.Fatal(http.ListenAndServeTLS(fmt.Sprintf("%s:%d", addr, port), certFile, keyFile, client.defaultHTTPHandler()))
 }
 
 // RegisterHandler binds the client's HandlerFunc to the provided MUX on the

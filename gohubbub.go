@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	linkParser "github.com/peterhellberg/link"
 )
 
 // Struct for storing information about a subscription.
@@ -112,6 +113,13 @@ func (client *Client) Discover(topic string) (string, error) {
 	}
 
 	defer resp.Body.Close()
+
+	for _, link := range linkParser.ParseResponse(resp) {
+		if link.Rel == "hub" {
+			return link.URI, nil
+		}
+	}
+
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("error reading feed response, %v", err)

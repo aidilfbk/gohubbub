@@ -20,6 +20,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"mime"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -111,6 +112,8 @@ type discoveredTopic struct {
 	Topic string
 }
 
+type discoveryFromPayloadFn func(io.Reader) (discoveredTopic, error)
+
 func discoverFromLinkHeader(headers http.Header) (result discoveredTopic, err error) {
 	for _, link := range linkParser.ParseHeader(headers) {
 		switch link.Rel {
@@ -195,7 +198,7 @@ func discoverFromHTMLPayload(body io.Reader) (result discoveredTopic, err error)
 // Discover queries an RSS or Atom feed for the hub which it is publishing to.
 func (client *Client) Discover(topic string) (string, error) {
 	req, _ := http.NewRequest("GET", topic, nil)
-	req.Header.Add("Accept", "application/rss+xml, application/rdf+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8")
+	req.Header.Add("Accept", "application/rss+xml, application/rdf+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, text/html;q=0.7, application/xhtml+xml;q=0.7")
 
 	resp, err := client.httpRequester.Do(req)
 	if err != nil {
@@ -211,8 +214,32 @@ func (client *Client) Discover(topic string) (string, error) {
 		return data.Hub, nil
 	}
 
-	if data, err := discoverFromXMLPayload(resp.Body); err == nil {
-		return data.Hub, nil
+	contentType := resp.Header.Get("Content-Type")
+	if contentType, _, err = mime.ParseMediaType(contentType); err == nil {
+		contentType = ""
+	}
+	if contentType == "" {
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return "", fmt.Errorf("error reading feed response, %v", err)
+		}
+		contentType = http.DetectContentType(body)
+		resp.Body = ioutil.NopCloser(bytes.NewReader(body))
+	}
+
+	var discoverFn discoveryFromPayloadFn
+	isHTML := strings.Contains(contentType, "html")
+
+	if strings.HasSuffix(contentType, "xml") && !isHTML {
+		discoverFn = discoverFromXMLPayload
+	} else if isHTML || strings.HasPrefix(contentType, "text/") {
+		discoverFn = discoverFromHTMLPayload
+	}
+
+	if discoverFn != nil {
+		if data, err := discoverFn(resp.Body); err == nil {
+			return data.Hub, nil
+		}
 	}
 
 	return "", fmt.Errorf("no hub found in feed")

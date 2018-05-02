@@ -67,7 +67,7 @@ type Client struct {
 	subscriptions map[string]*subscription // Map of subscriptions.
 	httpRequester HttpRequester            // e.g. http.Client{}.
 	history       *ring.Ring               // Stores past messages, for deduplication.
-	https         bool                     // Whether the callback url supports HTTPS
+	HTTPS         bool                     // Whether the callback url supports HTTPS
 	hubSecretKey  *[]byte
 }
 
@@ -315,7 +315,7 @@ func (client *Client) StartAndServe(addr string, port int) {
 }
 
 func (client *Client) StartAndServeTLS(addr string, port int, certFile, keyFile string) {
-	client.https = true
+	client.HTTPS = true
 
 	// Trigger subscription requests async.
 	go client.Start()
@@ -418,7 +418,7 @@ func (client *Client) makeUnsubscribeRequeast(s *subscription) {
 
 func (client *Client) formatCallbackURL(callback uuid.UUID) string {
 	var secureProtocolSuffix string
-	if client.https {
+	if client.HTTPS {
 		secureProtocolSuffix = "s"
 	}
 	return fmt.Sprintf("http%s://%s/push-callback/%s", secureProtocolSuffix, client.self, callback.String())

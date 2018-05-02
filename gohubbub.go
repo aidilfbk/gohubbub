@@ -394,17 +394,20 @@ func (client *Client) handleCallback(resp http.ResponseWriter, req *http.Request
 		} else {
 			log.Printf("Update for %s", s)
 
+			var hubSignatureHeader string
+			if client.hubSecretKey != nil {
+				hubSignatureHeader = req.Header.Get("X-Hub-Signature")
+				if hubSignatureHeader == "" {
+					log.Printf("Expected X-Hub-Signature header from Hub")
+					resp.WriteHeader(http.StatusUnauthorized)
+					return
+				}
+			}
+
 			// Asynchronously validate X-Hub-Signature then notify the subscription handler, shouldn't affect response.
 			go func() {
-				if client.hubSecretKey != nil {
-					hubSignatureHeader := req.Header.Get("X-Hub-Signature")
-					if hubSignatureHeader == "" {
-						log.Printf("Expected X-Hub-Signature header from Hub")
-						return
-					}
-					if !client.validateHubSignature(hubSignatureHeader, requestBody) {
-						return
-					}
+				if hubSignatureHeader != "" && !client.validateHubSignature(hubSignatureHeader, requestBody) {
+					return
 				}
 
 				client.broadcast(s, req.Header.Get("Content-Type"), requestBody)

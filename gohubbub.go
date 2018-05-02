@@ -196,22 +196,22 @@ func discoverFromHTMLPayload(body io.Reader) (result discoveredTopic, err error)
 }
 
 // Discover queries an RSS or Atom feed for the hub which it is publishing to.
-func (client *Client) Discover(topic string) (string, error) {
-	req, _ := http.NewRequest("GET", topic, nil)
+func (client *Client) Discover(discoveryURL string) (hub string, topic string, err error) {
+	req, _ := http.NewRequest("GET", discoveryURL, nil)
 	req.Header.Add("Accept", "application/rss+xml, application/rdf+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, text/html;q=0.7, application/xhtml+xml;q=0.7")
 
 	resp, err := client.httpRequester.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("unable to fetch feed, %v", err)
+		return "", "", fmt.Errorf("unable to fetch feed, %v", err)
 	}
 	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("feed request failed, status code %d", resp.StatusCode)
+		return "", "", fmt.Errorf("feed request failed, status code %d", resp.StatusCode)
 	}
 
 	defer resp.Body.Close()
 
 	if data, err := discoverFromLinkHeader(resp.Header); err == nil {
-		return data.Hub, nil
+		return data.Hub, data.Topic, nil
 	}
 
 	contentType := resp.Header.Get("Content-Type")
@@ -221,7 +221,7 @@ func (client *Client) Discover(topic string) (string, error) {
 	if contentType == "" {
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			return "", fmt.Errorf("error reading feed response, %v", err)
+			return "", "", fmt.Errorf("error reading feed response, %v", err)
 		}
 		contentType = http.DetectContentType(body)
 		resp.Body = ioutil.NopCloser(bytes.NewReader(body))
@@ -238,17 +238,17 @@ func (client *Client) Discover(topic string) (string, error) {
 
 	if discoverFn != nil {
 		if data, err := discoverFn(resp.Body); err == nil {
-			return data.Hub, nil
+			return data.Hub, data.Topic, nil
 		}
 	}
 
-	return "", fmt.Errorf("no hub found in feed")
+	return "", "", fmt.Errorf("no hub found in feed")
 }
 
 // DiscoverAndSubscribe queries an RSS or Atom feed for the hub which it is
 // publishing to, then subscribes for updates.
 func (client *Client) DiscoverAndSubscribe(topic string, handler func(string, []byte)) error {
-	hub, err := client.Discover(topic)
+	hub, topic, err := client.Discover(topic)
 	if err != nil {
 		return fmt.Errorf("unable to find hub, %v", err)
 	}

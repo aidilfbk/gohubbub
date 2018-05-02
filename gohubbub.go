@@ -102,6 +102,46 @@ func (client *Client) HasSubscription(topic string) bool {
 	return ok
 }
 
+type discoveredTopic struct {
+	Hub   string
+	Topic string
+}
+
+func discoverFromLinkHeader(headers http.Header) (result discoveredTopic, err error) {
+	for _, link := range linkParser.ParseHeader(headers) {
+		switch link.Rel {
+		case "hub":
+			result.Hub = link.URI
+		case "self":
+			result.Topic = link.URI
+		}
+	}
+
+	if result.Hub == "" || result.Topic == "" {
+		return discoveredTopic{}, fmt.Errorf("Missing Link headers, %+v", headers["Link"])
+	}
+
+	return result, nil
+}
+
+func discoverFromXMLPayload(body []byte) (result discoveredTopic, err error) {
+	var f feed
+	if xmlError := xml.Unmarshal(body, &f); xmlError != nil {
+		return result, fmt.Errorf("unable to parse xml, %v", xmlError)
+	}
+
+	links := append(f.Link, f.Channel.Link...)
+	for _, link := range links {
+		switch link.Rel {
+		case "hub":
+			result.Hub = link.Href
+		case "self":
+			result.Topic = link.Href
+		}
+	}
+	return result, nil
+}
+
 // Discover queries an RSS or Atom feed for the hub which it is publishing to.
 func (client *Client) Discover(topic string) (string, error) {
 	req, _ := http.NewRequest("GET", topic, nil)
@@ -117,10 +157,8 @@ func (client *Client) Discover(topic string) (string, error) {
 
 	defer resp.Body.Close()
 
-	for _, link := range linkParser.ParseResponse(resp) {
-		if link.Rel == "hub" {
-			return link.URI, nil
-		}
+	if data, err := discoverFromLinkHeader(resp.Header); err == nil {
+		return data.Hub, nil
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
@@ -128,16 +166,8 @@ func (client *Client) Discover(topic string) (string, error) {
 		return "", fmt.Errorf("error reading feed response, %v", err)
 	}
 
-	var f feed
-	if xmlError := xml.Unmarshal(body, &f); xmlError != nil {
-		return "", fmt.Errorf("unable to parse xml, %v", xmlError)
-	}
-
-	links := append(f.Link, f.Channel.Link...)
-	for _, link := range links {
-		if link.Rel == "hub" {
-			return link.Href, nil
-		}
+	if data, err := discoverFromXMLPayload(body); err == nil {
+		return data.Hub, nil
 	}
 
 	return "", fmt.Errorf("no hub found in feed")

@@ -104,7 +104,10 @@ func (client *Client) HasSubscription(topic string) bool {
 
 // Discover queries an RSS or Atom feed for the hub which it is publishing to.
 func (client *Client) Discover(topic string) (string, error) {
-	resp, err := http.Get(topic)
+	req, _ := http.NewRequest("GET", topic, nil)
+	req.Header.Add("Accept", "application/rss+xml, application/rdf+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8")
+
+	resp, err := client.httpRequester.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("unable to fetch feed, %v", err)
 	}

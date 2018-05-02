@@ -16,6 +16,7 @@ import (
 	"encoding/hex"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -124,9 +125,9 @@ func discoverFromLinkHeader(headers http.Header) (result discoveredTopic, err er
 	return result, nil
 }
 
-func discoverFromXMLPayload(body []byte) (result discoveredTopic, err error) {
+func discoverFromXMLPayload(body io.Reader) (result discoveredTopic, err error) {
 	var f feed
-	if xmlError := xml.Unmarshal(body, &f); xmlError != nil {
+	if xmlError := xml.NewDecoder(body).Decode(&f); xmlError != nil {
 		return result, fmt.Errorf("unable to parse xml, %v", xmlError)
 	}
 
@@ -161,12 +162,7 @@ func (client *Client) Discover(topic string) (string, error) {
 		return data.Hub, nil
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("error reading feed response, %v", err)
-	}
-
-	if data, err := discoverFromXMLPayload(body); err == nil {
+	if data, err := discoverFromXMLPayload(resp.Body); err == nil {
 		return data.Hub, nil
 	}
 

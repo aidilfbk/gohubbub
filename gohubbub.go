@@ -88,12 +88,12 @@ func NewClient(self string, from string) *Client {
 func (client *Client) SetHubSecretKey(key []byte) error {
 	enc := base64.RawURLEncoding
 	keyLen := enc.EncodedLen(len(key))
-	if keyLen > 200 {
+	if keyLen >= 200 {
 		/*
 			https://www.w3.org/TR/websub/#subscriber-sends-subscription-request
 			This parameter MUST be less than 200 bytes in length.
 		*/
-		return fmt.Errorf("Secret key too long, %x", key)
+		return fmt.Errorf("Secret key must be less than %d bytes in length", enc.DecodedLen(200))
 	}
 	urlSafeKey := make([]byte, keyLen)
 	enc.Encode(urlSafeKey, key)

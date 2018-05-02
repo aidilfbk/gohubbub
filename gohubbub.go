@@ -15,6 +15,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -27,6 +28,8 @@ import (
 
 	"github.com/google/uuid"
 	linkParser "github.com/peterhellberg/link"
+	"golang.org/x/net/html"
+	htmlAtom "golang.org/x/net/html/atom"
 )
 
 // Struct for storing information about a subscription.
@@ -141,6 +144,52 @@ func discoverFromXMLPayload(body io.Reader) (result discoveredTopic, err error) 
 		}
 	}
 	return result, nil
+}
+
+func discoverFromHTMLPayload(body io.Reader) (result discoveredTopic, err error) {
+	tokenizer := html.NewTokenizer(body)
+
+	linkTagName := []byte(htmlAtom.Link.String())
+	relAttr := []byte(htmlAtom.Rel.String())
+	hrefAttr := []byte(htmlAtom.Href.String())
+
+	for {
+		switch tokenizer.Next() {
+		case html.ErrorToken:
+			err := tokenizer.Err()
+			if err == io.EOF {
+				err = errors.New("Did not find required <link> tags in payload")
+			}
+			return result, err
+		case html.StartTagToken, html.SelfClosingTagToken:
+			if tagName, hasAttr := tokenizer.TagName(); bytes.Equal(tagName, linkTagName) && hasAttr {
+				var rel, href []byte
+
+				var attrKey, attrVal []byte
+				hasMoreAttrs := true
+				for hasMoreAttrs {
+					attrKey, attrVal, hasMoreAttrs = tokenizer.TagAttr()
+					switch {
+					case bytes.Equal(attrKey, relAttr):
+						rel = attrVal
+					case bytes.Equal(attrKey, hrefAttr):
+						href = attrVal
+					}
+				}
+
+				switch string(rel) {
+				case "hub":
+					result.Hub = string(href)
+				case "self":
+					result.Topic = string(href)
+				}
+
+				if result.Hub != "" && result.Topic != "" {
+					return result, nil
+				}
+			}
+		}
+	}
 }
 
 // Discover queries an RSS or Atom feed for the hub which it is publishing to.

@@ -215,7 +215,7 @@ func (client *Client) Discover(discoveryURL string) (hub string, topic string, e
 	}
 
 	contentType := resp.Header.Get("Content-Type")
-	if contentType, _, err = mime.ParseMediaType(contentType); err == nil {
+	if contentType, _, err = mime.ParseMediaType(contentType); err != nil {
 		contentType = ""
 	}
 	if contentType == "" {

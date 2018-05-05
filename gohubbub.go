@@ -379,7 +379,7 @@ func (client *Client) makeSubscriptionRequest(s *subscription) {
 		body.Set("hub.secret", string(*client.hubSecretKey))
 	}
 
-	req, _ := http.NewRequest("POST", s.hub, bytes.NewBufferString(body.Encode()))
+	req, _ := http.NewRequest("POST", s.hub, strings.NewReader(body.Encode()))
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Add("From", client.from)
 
@@ -401,7 +401,7 @@ func (client *Client) makeUnsubscribeRequeast(s *subscription) {
 	body.Add("hub.topic", s.topic)
 	body.Add("hub.mode", "unsubscribe")
 
-	req, _ := http.NewRequest("POST", s.hub, bytes.NewBufferString(body.Encode()))
+	req, _ := http.NewRequest("POST", s.hub, strings.NewReader(body.Encode()))
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Add("From", client.from)
 

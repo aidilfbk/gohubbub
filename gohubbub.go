@@ -44,7 +44,7 @@ type subscription struct {
 }
 
 func (s subscription) String() string {
-	return fmt.Sprintf("%s (#%d %s)", s.topic, s.id, s.lease)
+	return fmt.Sprintf("%s (UUID:%s %s)", s.topic, s.id, s.lease)
 }
 
 var nilSubscription = &subscription{}

@@ -65,7 +65,7 @@ type Client struct {
 	from          string                   // String passed in the "From" header.
 	running       bool                     // Whether the server is running.
 	subscriptions map[string]*subscription // Map of subscriptions.
-	httpRequester HttpRequester            // e.g. http.Client{}.
+	HttpRequester HttpRequester            // e.g. http.Client{}.
 	history       *ring.Ring               // Stores past messages, for deduplication.
 	HTTPS         bool                     // Whether the callback url supports HTTPS
 	hubSecretKey  *[]byte
@@ -200,7 +200,7 @@ func (client *Client) Discover(discoveryURL string) (hub string, topic string, e
 	req, _ := http.NewRequest("GET", discoveryURL, nil)
 	req.Header.Add("Accept", "application/rss+xml, application/rdf+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, text/html;q=0.7, application/xhtml+xml;q=0.7")
 
-	resp, err := client.httpRequester.Do(req)
+	resp, err := client.HttpRequester.Do(req)
 	defer resp.Body.Close()
 	if err != nil {
 		return "", "", fmt.Errorf("unable to fetch feed, %v", err)
@@ -383,7 +383,7 @@ func (client *Client) makeSubscriptionRequest(s *subscription) {
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Add("From", client.from)
 
-	resp, err := client.httpRequester.Do(req)
+	resp, err := client.HttpRequester.Do(req)
 
 	if err != nil {
 		log.Printf("Subscription failed, %s, %s", *s, err)
@@ -405,7 +405,7 @@ func (client *Client) makeUnsubscribeRequeast(s *subscription) {
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Add("From", client.from)
 
-	resp, err := client.httpRequester.Do(req)
+	resp, err := client.HttpRequester.Do(req)
 
 	if err != nil {
 		log.Printf("Unsubscribe failed, %s, %s", *s, err)
